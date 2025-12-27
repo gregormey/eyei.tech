@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EyEi.Tech - Bubble</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; }
+    canvas { display: block; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    var time = 0;
+
+    // Bubble position offset and velocity for push interaction
+    var offsetX = 0;
+    var offsetY = 0;
+    var velocityX = 0;
+    var velocityY = 0;
+    var friction = 0.94; // Slows down the movement (easing out)
+    var bubbleRadius = 120;
+    
+    // Burst mechanics
+    var clickCount = 0;
+    var maxClicks = 5;
+    var isBurst = false;
+    var burstTime = 0;
+    var burstParticles = [];
+    
+    // Chicken falling state
+    var chickenY = 0;
+    var chickenVelY = 0;
+    var chickenRotation = 0;
+    var chickenRotationSpeed = 0;
+    var gravity = 0.5;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function getBubbleCenter() {
+      return {
+        x: canvas.width / 2 + Math.sin(time * 0.5) * 30 + offsetX,
+        y: canvas.height / 2 + Math.cos(time * 0.7) * 20 + offsetY
+      };
+    }
+
+    function createBurstParticles(x, y) {
+      burstParticles = [];
+      for (var i = 0; i < 20; i++) {
+        var angle = (i / 20) * Math.PI * 2 + Math.random() * 0.3;
+        var speed = 3 + Math.random() * 8;
+        burstParticles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: 5 + Math.random() * 15,
+          alpha: 1,
+          hue: Math.random() * 360
+        });
+      }
+    }
+    
+    function handleInteraction(clientX, clientY) {
+      if (isBurst) return; // Don't interact after burst
+      
+      var bubble = getBubbleCenter();
+      
+      // Calculate direction from click to bubble center
+      var dx = bubble.x - clientX;
+      var dy = bubble.y - clientY;
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Only count clicks on the bubble
+      if (distance <= bubbleRadius + 20) {
+        clickCount++;
+        
+        // Check if bubble should burst
+        if (clickCount >= maxClicks) {
+          isBurst = true;
+          burstTime = time;
+          createBurstParticles(bubble.x, bubble.y);
+          chickenY = bubble.y;
+          chickenVelY = -8; // Initial upward velocity
+          chickenRotationSpeed = (Math.random() - 0.5) * 0.3;
+        }
+      }
+      
+      // Normalize and apply push force (stronger when clicking closer to center)
+      if (distance > 0) {
+        var pushStrength = Math.max(5, 25 - distance * 0.08);
+        velocityX += (dx / distance) * pushStrength;
+        velocityY += (dy / distance) * pushStrength;
+      }
+    }
+
+    canvas.addEventListener('click', function(e) {
+      handleInteraction(e.clientX, e.clientY);
+    });
+
+    canvas.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        handleInteraction(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    function drawBubble(x, y, radius, t) {
+      var segments = 64;
+      var i, angle, wobble, r, px, py;
+
+      ctx.beginPath();
+      for (i = 0; i <= segments; i++) {
+        angle = (i / segments) * Math.PI * 2;
+        wobble = Math.sin(angle * 3 + t * 2) * 5 + Math.sin(angle * 5 - t * 1.5) * 3;
+        r = radius + wobble;
+        px = x + Math.cos(angle) * r;
+        py = y + Math.sin(angle) * r;
+
+        if (i === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+      ctx.closePath();
+
+      var gradient = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.3, 0, x, y, radius);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+      gradient.addColorStop(0.5, 'rgba(150, 200, 255, 0.15)');
+      gradient.addColorStop(1, 'rgba(100, 150, 255, 0.1)');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      var hue1 = (t * 50) % 360;
+      var hue2 = (t * 50 + 60) % 360;
+      var hue3 = (t * 50 + 120) % 360;
+      var shimmer = ctx.createLinearGradient(x - radius, y, x + radius, y);
+      shimmer.addColorStop(0, 'hsla(' + hue1 + ', 70%, 70%, 0.3)');
+      shimmer.addColorStop(0.5, 'hsla(' + hue2 + ', 70%, 70%, 0.2)');
+      shimmer.addColorStop(1, 'hsla(' + hue3 + ', 70%, 70%, 0.3)');
+      ctx.fillStyle = shimmer;
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.ellipse(x - radius * 0.4, y - radius * 0.4, radius * 0.2, radius * 0.15, -0.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fill();
+    }
+
+    function drawBurstParticles() {
+      for (var i = 0; i < burstParticles.length; i++) {
+        var p = burstParticles[i];
+        if (p.alpha <= 0) continue;
+        
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * p.alpha, 0, Math.PI * 2);
+        ctx.fillStyle = 'hsla(' + p.hue + ', 80%, 70%, ' + p.alpha + ')';
+        ctx.fill();
+        
+        // Add shimmer effect
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * p.alpha * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, ' + (p.alpha * 0.5) + ')';
+        ctx.fill();
+      }
+    }
+    
+    function updateBurstParticles() {
+      for (var i = 0; i < burstParticles.length; i++) {
+        var p = burstParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15; // gravity on particles
+        p.alpha -= 0.02;
+        p.vx *= 0.98;
+      }
+    }
+
+    function drawChicken(x, y, scale, velocityMag, t, rotation) {
+      var s = scale; // shorthand for scale
+      rotation = rotation || 0;
+      
+      // Calculate panic level (0 to 1) based on velocity
+      var panicLevel = Math.min(1, velocityMag / 12);
+      var eyeScale = 1 + panicLevel * 0.6;
+      var wingFlap = Math.sin(t * 25 * (0.3 + panicLevel * 0.7)) * panicLevel;
+      var bodyShake = Math.sin(t * 30) * panicLevel * 2;
+      
+      ctx.save();
+      ctx.translate(x + bodyShake, y);
+      ctx.rotate(rotation);
+      
+      // === LEFT WING ===
+      ctx.save();
+      ctx.translate(-24 * s, 0);
+      ctx.rotate(-0.3 + wingFlap * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 8 * s, 12 * s, 0.3, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFD93D';
+      ctx.fill();
+      ctx.strokeStyle = '#E8B830';
+      ctx.lineWidth = 1.5 * s;
+      ctx.stroke();
+      ctx.restore();
+      
+      // === RIGHT WING ===
+      ctx.save();
+      ctx.translate(24 * s, 0);
+      ctx.rotate(0.3 - wingFlap * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 8 * s, 12 * s, -0.3, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFD93D';
+      ctx.fill();
+      ctx.strokeStyle = '#E8B830';
+      ctx.lineWidth = 1.5 * s;
+      ctx.stroke();
+      ctx.restore();
+      
+      // === CHICKEN BODY/HEAD ===
+      // Main yellow body
+      ctx.beginPath();
+      ctx.ellipse(0, -8 * s, 26 * s, 28 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFD93D';
+      ctx.fill();
+      ctx.strokeStyle = '#E8B830';
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
+      
+      // === HEAD TUFT (feathers) ===
+      ctx.beginPath();
+      ctx.moveTo(-5 * s, -36 * s);
+      ctx.quadraticCurveTo(-8 * s, -48 * s, -3 * s, -44 * s);
+      ctx.quadraticCurveTo(0, -52 * s, 3 * s, -44 * s);
+      ctx.quadraticCurveTo(8 * s, -48 * s, 5 * s, -36 * s);
+      ctx.closePath();
+      ctx.fillStyle = '#FF9F43';
+      ctx.fill();
+      
+      // === BEAK ===
+      ctx.beginPath();
+      ctx.moveTo(-6 * s, -4 * s);
+      ctx.lineTo(0, 8 * s);
+      ctx.lineTo(6 * s, -4 * s);
+      ctx.closePath();
+      ctx.fillStyle = '#FF6B35';
+      ctx.fill();
+      ctx.strokeStyle = '#E85A2A';
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+      
+      // === ROSY CHEEKS ===
+      ctx.beginPath();
+      ctx.ellipse(-18 * s, -2 * s, 6 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 150, 150, 0.5)';
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.ellipse(18 * s, -2 * s, 6 * s, 4 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 150, 150, 0.5)';
+      ctx.fill();
+      
+      // === EYES ===
+      var eyeY = -16 * s;
+      var eyeSpacing = 12 * s;
+      var baseEyeSize = 8 * s;
+      var eyeSize = baseEyeSize * eyeScale;
+      
+      // Left eye white
+      ctx.beginPath();
+      ctx.ellipse(-eyeSpacing, eyeY, eyeSize, eyeSize * 1.1, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+      
+      // Left pupil
+      ctx.beginPath();
+      ctx.ellipse(-eyeSpacing, eyeY + 1 * s, 4 * s * eyeScale, 5 * s * eyeScale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fill();
+      
+      // Left eye highlight
+      ctx.beginPath();
+      ctx.ellipse(-eyeSpacing - 2 * s, eyeY - 2 * s, 2 * s, 2 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      
+      // Right eye white
+      ctx.beginPath();
+      ctx.ellipse(eyeSpacing, eyeY, eyeSize, eyeSize * 1.1, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1 * s;
+      ctx.stroke();
+      
+      // Right pupil
+      ctx.beginPath();
+      ctx.ellipse(eyeSpacing, eyeY + 1 * s, 4 * s * eyeScale, 5 * s * eyeScale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fill();
+      
+      // Right eye highlight
+      ctx.beginPath();
+      ctx.ellipse(eyeSpacing - 2 * s, eyeY - 2 * s, 2 * s, 2 * s, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+      
+      // === EGGSHELL (in front, covering lower body) ===
+      // Shell shadow
+      ctx.beginPath();
+      ctx.ellipse(3 * s, 15 * s, 32 * s, 25 * s, 0, 0, Math.PI);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fill();
+      
+      // Main shell body
+      ctx.beginPath();
+      ctx.ellipse(0, 13 * s, 30 * s, 24 * s, 0, 0, Math.PI);
+      ctx.fillStyle = '#FFF8E7';
+      ctx.fill();
+      ctx.strokeStyle = '#E8DCC8';
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
+      
+      // Cracked edge (jagged top of shell)
+      ctx.beginPath();
+      ctx.moveTo(-30 * s, 13 * s);
+      ctx.lineTo(-25 * s, 3 * s);
+      ctx.lineTo(-18 * s, 11 * s);
+      ctx.lineTo(-10 * s, -1 * s);
+      ctx.lineTo(-3 * s, 9 * s);
+      ctx.lineTo(5 * s, -3 * s);
+      ctx.lineTo(12 * s, 7 * s);
+      ctx.lineTo(20 * s, 0);
+      ctx.lineTo(26 * s, 10 * s);
+      ctx.lineTo(30 * s, 13 * s);
+      ctx.lineTo(30 * s, 13 * s);
+      ctx.arcTo(30 * s, 37 * s, -30 * s, 37 * s, 24 * s);
+      ctx.lineTo(-30 * s, 13 * s);
+      ctx.closePath();
+      ctx.fillStyle = '#FFF8E7';
+      ctx.fill();
+      ctx.strokeStyle = '#E8DCC8';
+      ctx.lineWidth = 2 * s;
+      ctx.stroke();
+      
+      // === FEET (peeking from bottom of shell) ===
+      var legSpread = panicLevel * 8 * s; // Spread apart when panicking
+      
+      // Left foot (spreads left)
+      ctx.beginPath();
+      ctx.moveTo(-12 * s - legSpread, 35 * s);
+      ctx.lineTo(-18 * s - legSpread, 43 * s);
+      ctx.lineTo(-14 * s - legSpread, 39 * s);
+      ctx.lineTo(-12 * s - legSpread, 45 * s);
+      ctx.lineTo(-10 * s - legSpread, 39 * s);
+      ctx.lineTo(-6 * s - legSpread, 43 * s);
+      ctx.lineTo(-8 * s - legSpread, 35 * s);
+      ctx.fillStyle = '#FF6B35';
+      ctx.fill();
+      
+      // Right foot (spreads right)
+      ctx.beginPath();
+      ctx.moveTo(12 * s + legSpread, 35 * s);
+      ctx.lineTo(18 * s + legSpread, 43 * s);
+      ctx.lineTo(14 * s + legSpread, 39 * s);
+      ctx.lineTo(12 * s + legSpread, 45 * s);
+      ctx.lineTo(10 * s + legSpread, 39 * s);
+      ctx.lineTo(6 * s + legSpread, 43 * s);
+      ctx.lineTo(8 * s + legSpread, 35 * s);
+      ctx.fillStyle = '#FF6B35';
+      ctx.fill();
+      
+      ctx.restore();
+    }
+
+    function animate() {
+      time += 0.016;
+
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (!isBurst) {
+        // Normal bubble behavior
+        // Apply velocity to offset
+        offsetX += velocityX;
+        offsetY += velocityY;
+
+        // Apply friction (fast start, slow down until stop)
+        velocityX *= friction;
+        velocityY *= friction;
+
+        // Stop very small movements
+        if (Math.abs(velocityX) < 0.01) velocityX = 0;
+        if (Math.abs(velocityY) < 0.01) velocityY = 0;
+
+        // Gradually return offset to center
+        offsetX *= 0.995;
+        offsetY *= 0.995;
+
+        var bubble = getBubbleCenter();
+        var velocityMag = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+
+        drawBubble(bubble.x, bubble.y, bubbleRadius, time);
+        drawChicken(bubble.x, bubble.y, bubbleRadius / 80, velocityMag, time);
+      } else {
+        // Burst state - animate particles and falling chicken
+        updateBurstParticles();
+        drawBurstParticles();
+        
+        // Update chicken physics
+        chickenVelY += gravity;
+        chickenY += chickenVelY;
+        chickenRotation += chickenRotationSpeed;
+        
+        // Draw falling chicken with panic animation and rotation
+        var bubble = getBubbleCenter();
+        if (chickenY < canvas.height + 200) {
+          drawChicken(bubble.x, chickenY, bubbleRadius / 80, 15, time, chickenRotation);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    animate();
+  </script>
+</body>
+</html>
