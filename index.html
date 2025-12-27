@@ -81,6 +81,7 @@
       // Only count clicks on the bubble
       if (distance <= bubbleRadius + 20) {
         clickCount++;
+        zaraz?.track('bubble_click', { clickCount: clickCount });
         
         // Check if bubble should burst
         if (clickCount >= maxClicks) {
@@ -90,6 +91,7 @@
           chickenY = bubble.y;
           chickenVelY = -8; // Initial upward velocity
           chickenRotationSpeed = (Math.random() - 0.5) * 0.3;
+          zaraz?.track('bubble_burst');
         }
       }
       
