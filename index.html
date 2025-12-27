@@ -39,8 +39,9 @@
     var chickenRotationSpeed = 0;
     var gravity = 0.5;
     
-    // Burst sound
+    // Sounds
     var burstSound = new Audio('./assets/burst.mp3');
+    var clickSound = new Audio('./assets/ey.mp3');
 
     function resize() {
       canvas.width = window.innerWidth;
@@ -96,6 +97,10 @@
           chickenRotationSpeed = (Math.random() - 0.5) * 0.3;
           burstSound.play();
           if (typeof zaraz !== 'undefined') zaraz.track('bubble_burst');
+        } else {
+          // Play click sound for non-burst clicks
+          clickSound.currentTime = 0;
+          clickSound.play();
         }
       }
       
